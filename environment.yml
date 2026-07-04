@@ -1,0 +1,20 @@
+# Exact environment used to produce the reference deliverable.
+# Recreate with:  conda env create -f environment.yml  &&  conda activate lidar-forest
+name: lidar-forest
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pdal=2.10          # point-cloud engine (crop, merge, outlier, smrf, writers.gdal)
+  - gdal=3.12          # gdaldem hillshade + raster IO
+  - python-pdal        # PDAL python bindings / CLI
+  - rasterio=1.4
+  - geopandas=1.1
+  - shapely=2.1
+  - scipy=1.17
+  - pandas=3.0
+  - numpy=2.4
+  - pyyaml=6.0
+  - laspy=2.7          # LAZ reading for QC histograms / volume gridding
+  - lazrs             # LAZ backend for laspy
+  - openpyxl=3.1       # .xlsx volume export

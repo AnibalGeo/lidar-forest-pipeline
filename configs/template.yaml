@@ -1,0 +1,148 @@
+# =============================================================================
+# TEMPLATE config — copy to configs/<project>.yaml and edit the values.
+# One config = one project; the code has no paths and no parameters.
+# Every field is commented: what it is, units, and when to change it.
+# Profile presets (forestal / agro / acopios) are at the bottom.
+# =============================================================================
+
+project:
+  name: MYPROJECT                  # free label, used only in messages/manifest
+  epsg: 32718                      # EPSG code of the LAZ coordinates (integer).
+                                   #   units must be metres. e.g. 32718 = UTM 18S.
+                                   #   CHANGE per project — this is the CRS of the cloud.
+
+# --- paths -------------------------------------------------------------------
+# Relative paths resolve against project_root. project_root, if relative,
+# resolves against THIS file's directory. Absolute paths are allowed anywhere.
+# Outputs ALWAYS go to {project_root}/out/ (not configurable, never near code).
+paths:
+  project_root: ../..              # points at the project data root (holds inputs + out/)
+  input_laz_dir: 01_Lidar/IN       # folder of raw flight-line *.laz (globbed, sorted)
+  aoi_buffer: Vectoriales/aoi.shp  # crop polygon; use AOI + a buffer (e.g. 25 m)
+  predios: Vectoriales/predios.shp # boundary for the empty-cell QC mask + real density
+  uso: Vectoriales/uso.shp         # polygons for per-zone canopy stats (stage 05)
+  stockpile_boundary: qc/piles.gpkg  # stockpile outline(s) for volumes (stage 06)
+  stockpile_name_field: nombre     # attribute column with the stockpile name
+
+# --- output grid (all rasters share it) --------------------------------------
+grid:
+  resolution: 1.0                  # metres/pixel. 1.0 forestal; 0.25 for stockpiles/detail.
+  bounds: [500000, 501000, 6000000, 6001000]  # [xmin,xmax,ymin,ymax] in project epsg (EXAMPLE).
+                                   #   CHANGE per project: use the AOI extent rounded to the
+                                   #   resolution so every raster is pixel-aligned.
+  nodata: -9999                    # nodata for float rasters (DTM/DSM/CHM)
+  data_type: float32               # pixel type for float rasters
+
+# --- stage 02: crop + merge --------------------------------------------------
+crop:
+  override_srs: true               # true if raw tiles have no embedded CRS (common). Stamps epsg.
+  compression: laszip              # LAZ compression for the cropped tiles
+  forward: header,vlr              # LAS fields to carry through from the source
+  max_workers: 7                   # parallel crop threads (~= number of tiles/cores)
+merge:
+  compression: laszip
+  forward: header,vlr
+
+# --- stage 03: classify ------------------------------------------------------
+# outlier flags noise (class 7); SMRF then finds ground (class 2) ignoring noise.
+# SMRF slope/threshold/scalar drive how aggressively ground is cut — these are
+# the values to tune per terrain (see profiles). ELM is intentionally not used.
+classify:
+  outlier:
+    method: statistical            # statistical outlier removal
+    mean_k: 8                      # neighbours used for the mean-distance test
+    multiplier: 3.0                # stddev multiplier; smaller = removes more points
+    class: 7                       # classification code assigned to noise
+  smrf:
+    ignore: "Classification[7:7]"  # exclude noise so blunders don't anchor the ground
+    slope: 0.2                     # max ground slope; LOWER on flat terrain (agro ~0.1)
+    window: 18                     # max morphological window (cells); larger removes bigger objects
+    threshold: 0.45                # elevation threshold (m) for ground membership
+    scalar: 1.2                    # scales threshold with slope
+    cell: 1.0                      # SMRF working cell size (m)
+
+# --- stage 04: rasters -------------------------------------------------------
+# Radii are EXPLICIT on purpose. writers.gdal defaults radius to resolution*sqrt(2),
+# which is right for gap-tolerant terrain (DTM) but ~2x too wide for surface/count
+# products (DSM/density) and inflates them. Pin per product.
+rasters:
+  dtm:
+    filter: "Classification == 2"  # ground only
+    output_type: idw               # inverse-distance interpolation (fills ground gaps)
+    radius: 1.4142                 # = resolution*sqrt(2). For res!=1, recompute: res*1.41421356
+    window_size: 3                 # moving-window fallback fill (terrain must be gapless)
+    power: 1.0                     # IDW distance power
+    nodata: -9999
+    data_type: float32
+  dsm:
+    filter: "Classification != 7"  # all real returns (drop noise)
+    output_type: max               # highest return per cell
+    radius: 0.7071                 # = resolution*sqrt(2)/2, circumscribes the cell. res*0.70710678
+    window_size: 0                 # NO gap fill (0). Filling here biases the surface upward.
+    nodata: -9999
+    data_type: float32
+  density:
+    filter: "Classification != 7"
+    output_type: count             # points per cell
+    radius: 0.7071                 # tight radius; the wide default inflates counts several-fold
+    window_size: 0
+    nodata: 0                      # 0 = no points (used by the empty-cell QC)
+    data_type: int32
+  chm:                             # canopy height = DSM - DTM
+    clamp_min: 0.0                 # negatives -> 0
+    clamp_max: 50.0                # cap (m): max plausible canopy; clips DSM-artefact spikes
+    nodata: -9999
+  hillshade:                       # QC/visual only
+    z_factor: 2                    # vertical exaggeration
+    azimuth: 315                   # light azimuth (deg)
+    altitude: 45                   # light altitude (deg)
+
+# --- stage 05: per-zone canopy stats -----------------------------------------
+zone_stats:
+  cover_threshold_m: 2.0           # height (m) for the "% cover above X" metric
+  percentile: 95                   # percentile reported next to mean/max
+
+# --- stage 06: stockpile volumes ---------------------------------------------
+volumes:
+  resolution: 1.0                  # gridding resolution (m) for the (a) point-cloud path
+  base: dtm                        # volume base surface = stage-04 DTM
+  run_variant_b: true              # also compute (b) from the DSM and report the (a)/(b) delta
+
+# --- QC gates (breach = stop; thresholds only here) --------------------------
+qc:
+  noise_pct_max: 3.0               # stop if noise% exceeds this
+  ground_pct_min: 10.0             # stop if ground% below this...
+  ground_pct_max: 50.0             # ...or above this
+  max_empty_cells: 0               # empty 1 m cells allowed inside Predios before stopping
+
+# =============================================================================
+# PROFILE PRESETS — copy the block you need over classify + qc (+ grid.resolution).
+# Only "forestal" is VALIDATED (reproduces the reference deliverable). "agro" and
+# "acopios" are starting points and MUST be validated per site (check the stage-03
+# hillshade, see README) before their numbers are trusted.
+# =============================================================================
+#
+# ---- forestal (VALIDATED) — plantation/forest, 1 m grid --------------------
+# grid: { resolution: 1.0 }
+# classify:
+#   smrf: { slope: 0.2, window: 18, threshold: 0.45, scalar: 1.2, cell: 1.0 }
+# qc: { noise_pct_max: 3.0, ground_pct_min: 10.0, ground_pct_max: 50.0, max_empty_cells: 0 }
+#
+# ---- agro (NOT validated) — flat cropland, gentler ground ------------------
+# Flatter terrain: lower slope and threshold so SMRF hugs the ground; expect a
+# higher ground fraction, so widen the upper gate.
+# grid: { resolution: 1.0 }
+# classify:
+#   smrf: { slope: 0.1, window: 18, threshold: 0.35, scalar: 1.2, cell: 1.0 }
+# qc: { noise_pct_max: 3.0, ground_pct_min: 20.0, ground_pct_max: 70.0, max_empty_cells: 0 }
+#
+# ---- acopios (NOT validated) — stockpiles/earthworks, fine DSM -------------
+# Bare piles: little canopy, ground fraction varies wildly, so relax the ground
+# gates; drop the DSM/grid resolution to 0.25 m for volume detail (recompute the
+# radii: dsm/density radius = 0.25*0.70710678 = 0.1768, dtm radius = 0.25*1.41421356 = 0.3536).
+# grid: { resolution: 0.25 }
+# rasters:
+#   dtm: { radius: 0.3536, window_size: 3 }
+#   dsm: { radius: 0.1768, window_size: 0 }
+#   density: { radius: 0.1768, window_size: 0 }
+# qc: { noise_pct_max: 5.0, ground_pct_min: 2.0, ground_pct_max: 95.0, max_empty_cells: 0 }

@@ -1,0 +1,25 @@
+# pipeline outputs (always under {project_root}/out/)
+out/
+
+# heavy data / rasters — figures under docs/figures/ are .png and ARE tracked
+*.laz
+*.las
+*.tif
+*.tiff
+*.gpkg
+
+# real project configs — only the template is published
+configs/*.yaml
+!configs/template.yaml
+
+# python
+__pycache__/
+*.pyc
+*.pyo
+.ipynb_checkpoints/
+
+# os / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
