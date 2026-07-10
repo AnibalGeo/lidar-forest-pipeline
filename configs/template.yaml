@@ -111,6 +111,24 @@ volumes:
   base: dtm                        # volume base surface = stage-04 DTM
   run_variant_b: true              # also compute (b) from the DSM and report the (a)/(b) delta
 
+# --- stage 07: individual tree detection (OPTIONAL, geometric baseline) ------
+# Disabled by default: --all runs s01-s06 only. Set enabled: true to detect
+# treetops (variable-window local maxima) + crowns (watershed) on a detection
+# CHM built at det_res from the classified cloud. Needs scikit-image.
+trees:
+  enabled: false
+  det_res: 0.5                     # detection-CHM resolution (m); finer than the 1 m grid
+  det_radius: 0.3536               # writers.gdal radius for the 0.5 m DSM (= res*sqrt(2)/2)
+  clamp_min: 0.0                   # negative CHM -> 0
+  clamp_max: 50.0                  # clips DSM-artefact spikes
+  smooth_sigma: 1.0                # gaussian smoothing before peak search
+  min_height_m: 2.0                # minimum tree height (drops understory)
+  lmf_ws_a: 1.2                    # variable window: ws_m = a + b*h (diameter, m)
+  lmf_ws_b: 0.06
+  lmf_ws_min: 1.5                  # minimum window (m)
+  qc_min_density: 50.0             # plausible trees/ha lower bound (warning only)
+  qc_max_density: 3000.0           # upper bound
+
 # --- QC gates (breach = stop; thresholds only here) --------------------------
 qc:
   noise_pct_max: 3.0               # stop if noise% exceeds this

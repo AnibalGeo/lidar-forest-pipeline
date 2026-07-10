@@ -18,3 +18,4 @@ dependencies:
   - laspy=2.7          # LAZ reading for QC histograms / volume gridding
   - lazrs             # LAZ backend for laspy
   - openpyxl=3.1       # .xlsx volume export
+  - scikit-image       # s07 tree detection (optional stage; watershed crowns)

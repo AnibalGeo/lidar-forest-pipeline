@@ -22,6 +22,7 @@ sys.path.insert(0, os.path.join(HERE, "stages"))
 import common  # noqa: E402
 import s01_inventory, s02_crop_merge, s03_classify  # noqa: E402
 import s04_rasters, s05_zone_stats, s06_volumes  # noqa: E402
+import s07_tree_detection  # noqa: E402
 
 STAGES = [
     ("s01", "s01_inventory", s01_inventory.run),
@@ -30,6 +31,7 @@ STAGES = [
     ("s04", "s04_rasters", s04_rasters.run),
     ("s05", "s05_zone_stats", s05_zone_stats.run),
     ("s06", "s06_volumes", s06_volumes.run),
+    ("s07", "s07_tree_detection", s07_tree_detection.run),  # opcional: trees.enabled
 ]
 ALIASES = {s[0]: i for i, s in enumerate(STAGES)}
 ALIASES.update({s[1]: i for i, s in enumerate(STAGES)})
@@ -103,6 +105,11 @@ def main():
         sys.exit(3)
     print("config %s  sha256=%s" % (args.config, cfg["_config_sha256"][:12]))
     print("out_dir %s\n" % cfg["paths"]["_out_dir"])
+
+    if not cfg.get("trees", {}).get("enabled", False):
+        if any(s[0] == "s07" for s in selected):
+            print("[off] s07_tree_detection — trees.enabled=false (o ausente) en el config\n")
+        selected = [s for s in selected if s[0] != "s07"]
 
     if args.dry_run:
         _dry_run(cfg, selected)
