@@ -163,13 +163,19 @@ edges):
 ![DSM minus point-cloud surface, over the stockpile](docs/figures/dsm_vs_laz_diff.png)
 
 After pinning `radius=0.7071, window_size=0`, the DSM path fell 8.0 % and the two
-methods **converged to +2.02 %** — within expected method noise:
+methods **converged to +2.3 %** — within expected method noise:
 
 | variant | net volume | vs (a) |
 |---------|-----------:|-------:|
-| (a) point cloud | 218 467 m³ | — |
-| (b) DSM (uncorrected) | 242 284 m³ | +10.9 % |
-| (b) DSM (corrected) | 222 889 m³ | **+2.02 %** |
+| (a) point cloud | 217 876 m³ | — |
+| (b) DSM (uncorrected) | 242 284 m³ | +11.2 % |
+| (b) DSM (corrected) | 222 889 m³ | **+2.3 %** |
+
+These are the **v2 reference values**. The v1 figure (218 467 m³, delta +2.02 %)
+silently depended on the input's extent: the cloud-gridding origin was taken from
+the westmost/northmost point fed in. The grid is now anchored to multiples of the
+resolution, so the volume is invariant to cropping — see the second lesson in the
+case study.
 
 A full case study is in [`docs/validation_case_study.md`](docs/validation_case_study.md).
 

@@ -90,7 +90,7 @@ Effect on the DSM:
 
 ## The result: convergence
 
-Re-running both volume paths against the same base DTM:
+Re-running both volume paths against the same base DTM (v1 gridding):
 
 | variant | net volume | vs (a) |
 |---------|-----------:|-------:|
@@ -101,13 +101,43 @@ Re-running both volume paths against the same base DTM:
 The DSM path fell **8.0 %** and the two independent methods converged from a
 10.9 % disagreement to **+2.02 %** — within the difference expected between a
 point-cloud surface and a rasterized one. With the methods in agreement, the
-218 467 m³ figure is validated, not merely computed.
+figure is validated, not merely computed.
+
+## Second lesson (v2): grid phase matters
+
+The convergence above hid a second implicit parameter. The point-cloud path
+gridded the cloud onto a raster whose **origin was taken from the input's own
+extent** (`x.min()`, `y.max()` of the points fed in). That made the v1 reference
+volume depend on something that has nothing to do with the stockpile: where the
+farthest point of the AOI happened to lie. It surfaced when an optimization
+pre-cropped the cloud to the stockpile's bounding box (+10 m) before gridding —
+same method, same data over the pile, and the volume moved +0.27 %, purely
+because the 1 m cells shifted phase and the per-cell maxima landed differently
+along the pile edges.
+
+The v2 fix anchors the gridding origin to **multiples of the resolution**
+(`minx = floor(x.min()/res)·res`, `maxy = ceil(y.max()/res)·res`), so the cell
+layout — and the volume — is invariant to how the input is cropped. Verified:
+the full AOI cloud (66.2 M points) and the bbox-cropped cloud give **exactly**
+the same net volume, 217 876.44 m³.
+
+Re-baselined reference values (v1 → v2):
+
+| metric | v1 (extent-dependent grid) | v2 (anchored grid) |
+|--------|---------------------------:|-------------------:|
+| (a) point cloud, net | 218 467.37 m³ | **217 876.44 m³** |
+| (b) DSM corrected, net | 222 889.19 m³ | 222 889.19 m³ (unchanged) |
+| delta (b) vs (a) | +2.02 % | **+2.30 %** |
+
+The DSM path (b) is untouched — its grid was already pinned in config
+(`grid.bounds`). The same principle, applied to both paths: no output may
+depend on a grid whose placement nobody chose.
 
 ## What generalizes
 
 1. **Cross-check with a method that shares no intermediate.** The bias was
    invisible inside either single calculation; it only appeared as a disagreement
-   between two. The +2.02 % residual is now a routine QC number, not an argument.
+   between two. The +2.3 % residual is now a routine QC number, not an argument.
 2. **Map disagreements, don't average them.** The cell-by-cell difference raster
    turned "the numbers are 10.9 % apart" into "the DSM is uniformly +3.2 m high,"
    which points straight at a cause.
@@ -117,3 +147,8 @@ point-cloud surface and a rasterized one. With the methods in agreement, the
    parameters nobody chose. The pipeline now pins *every* writer parameter in
    config — including the ones that equal a default — so no deliverable can
    silently depend on a tool version's defaults again.
+5. **Anchor every grid explicitly.** A raster is defined by resolution *and*
+   origin. If the origin comes from the input's extent, the result changes when
+   the input is cropped, buffered, or tiled — anchor it to multiples of the
+   resolution (or a fixed `grid.bounds`) and the computation becomes
+   crop-invariant.
