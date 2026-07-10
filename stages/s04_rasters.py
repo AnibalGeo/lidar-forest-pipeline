@@ -74,20 +74,9 @@ def run(cfg, force=False):
                         "-alt", str(hs["altitude"]), "-compute_edges"],
                        capture_output=True, text=True)
 
-    # ---- real density inside Predios (the deliverable density metric)
-    predios = gpd.read_file(cfg["paths"]["_predios"])
-    pred_wkt = predios.geometry.union_all().wkt
-    pred_area = float(predios.geometry.area.sum())
-    md = common.run_pdal([
-        {"type": "readers.las", "filename": src},
-        {"type": "filters.crop", "polygon": pred_wkt},
-        {"type": "filters.expression", "expression": rr["density"]["filter"]},
-        {"type": "filters.stats", "dimensions": "Classification"},
-    ])
-    n_in = int(md["stages"]["filters.stats"]["statistic"][0]["count"])
-    density_real = round(n_in / pred_area, 2)
-
     # ---- empty-cell QC on the density grid, masked to Predios
+    # (density_real now comes from the stage-03 chunked pass)
+    predios = gpd.read_file(cfg["paths"]["_predios"])
     with rasterio.open(den_p) as ds:
         dens = ds.read(1); transform = ds.transform; crs = ds.crs
     mask = features.rasterize([(g, 1) for g in predios.to_crs(crs).geometry],
@@ -95,8 +84,7 @@ def run(cfg, force=False):
                               fill=0, dtype="uint8").astype(bool)
     empty = mask & (dens == 0)
     n_empty = int(empty.sum())
-    print("rasters: density_real=%.2f pts/m2  chm_clamped=%d  empty_cells=%d" %
-          (density_real, n_clamped, n_empty))
+    print("rasters: chm_clamped=%d  empty_cells=%d" % (n_clamped, n_empty))
 
     if n_empty > cfg["qc"]["max_empty_cells"]:
         lbl, nlab = ndimage.label(empty)
@@ -113,8 +101,7 @@ def run(cfg, force=False):
                                % (n_empty, nlab, hp))
 
     common.record_stage(cfg, "s04_rasters", time.time() - t0,
-                        {"density_real": density_real, "chm_clamped_cells": n_clamped,
-                         "empty_cells": n_empty}, outs)
+                        {"chm_clamped_cells": n_clamped, "empty_cells": n_empty}, outs)
 
 
 if __name__ == "__main__":
