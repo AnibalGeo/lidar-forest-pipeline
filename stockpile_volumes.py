@@ -76,8 +76,12 @@ def surface_from_pointcloud(path: Path, resolution: float):
     except Exception:
         pass
 
-    minx, maxx = x.min(), x.max()
-    miny, maxy = y.min(), y.max()
+    # Anchor the grid origin to multiples of the resolution: the cell layout
+    # (and therefore the volume) must not depend on the input's extent —
+    # cropping the cloud around the stockpile has to give the same answer.
+    minx = np.floor(x.min() / resolution) * resolution
+    maxy = np.ceil(y.max() / resolution) * resolution
+    maxx, miny = x.max(), y.min()
     width = int(np.ceil((maxx - minx) / resolution)) + 1
     height = int(np.ceil((maxy - miny) / resolution)) + 1
     print(f"[..] Gridding {len(x):,} pts -> {width}x{height} cells "
