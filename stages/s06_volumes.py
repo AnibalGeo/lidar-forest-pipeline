@@ -45,7 +45,24 @@ def run(cfg, force=False):
     cloud = common.out(cfg, "03_classify", "merged_class.laz")
     dsm = common.out(cfg, "04_rasters", "dsm_1m.tif")
 
-    a_vol, a_csv = _run_variant(cfg, cloud, "a_cloud",
+    # pre-crop the cloud to the stockpile bbox (+10 m) so the volume tool
+    # grids a few hundred metres instead of the whole AOI
+    import geopandas as gpd
+    bnd = gpd.read_file(cfg["paths"]["_stockpile_boundary"])
+    if bnd.crs is not None:
+        bnd = bnd.to_crs(cfg["project"]["epsg"])
+    xmin, ymin, xmax, ymax = bnd.total_bounds
+    pad = 10.0
+    cropped = common.out(cfg, "06_volumes", "cloud_bbox.laz")
+    common.run_pdal([
+        {"type": "readers.las", "filename": cloud},
+        {"type": "filters.crop", "bounds": "([%s, %s], [%s, %s])"
+         % (xmin - pad, xmax + pad, ymin - pad, ymax + pad)},
+        {"type": "writers.las", "filename": cropped, "a_srs": common.epsg_str(cfg),
+         "compression": "laszip", "forward": "header,vlr"},
+    ], metadata=False)
+
+    a_vol, a_csv = _run_variant(cfg, cropped, "a_cloud",
                                 ["--resolution", str(cfg["volumes"]["resolution"])])
     summary = {"variant_a_cloud": a_vol, "variant_a_csv": a_csv}
     print("volumes (a) cloud:", {k: round(v, 2) for k, v in a_vol.items()})
