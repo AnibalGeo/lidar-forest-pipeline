@@ -101,6 +101,9 @@ rasters:
 zone_stats:
   cover_threshold_m: 2.0           # height (m) for the "% cover above X" metric
   percentile: 95                   # percentile reported next to mean/max
+  passthrough_fields: [ID_RODAL, NOM_PREDIO, TIPOUSO, GRUPOCLASE]
+                                   # attribute columns of the Uso layer copied verbatim
+                                   # into the stats CSV (use [] for none)
 
 # --- stage 06: stockpile volumes ---------------------------------------------
 volumes:

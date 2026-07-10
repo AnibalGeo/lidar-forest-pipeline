@@ -29,6 +29,7 @@ def run(cfg, force=False):
     chm = common.out(cfg, "04_rasters", "chm_1m.tif")
     thr = cfg["zone_stats"]["cover_threshold_m"]
     pct = cfg["zone_stats"]["percentile"]
+    passthrough = cfg["zone_stats"]["passthrough_fields"]
     ds = rasterio.open(chm)
     nod = ds.nodata
     uso = gpd.read_file(cfg["paths"]["_uso"]).to_crs(ds.crs)
@@ -41,10 +42,10 @@ def run(cfg, force=False):
             v = arr[arr != nod]
         except Exception:  # noqa: BLE001
             v = np.array([])
-        rec = {"poly_id": idx, "ID_RODAL": row.get("ID_RODAL"),
-               "NOM_PREDIO": row.get("NOM_PREDIO"), "TIPOUSO": row.get("TIPOUSO"),
-               "GRUPOCLASE": row.get("GRUPOCLASE"),
-               "area_ha": round(row.geometry.area / 1e4, 4), "n_cells": int(v.size)}
+        rec = {"poly_id": idx}
+        for fld in passthrough:
+            rec[fld] = row.get(fld)
+        rec.update({"area_ha": round(row.geometry.area / 1e4, 4), "n_cells": int(v.size)})
         if v.size:
             rec.update({"chm_mean": round(float(v.mean()), 2),
                         "chm_p%d" % pct: round(float(np.percentile(v, pct)), 2),
