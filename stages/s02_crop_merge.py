@@ -20,8 +20,8 @@ def outputs(cfg):
 def _crop_one(args):
     f, wkt, cfg = args
     epsg = common.epsg_str(cfg)
-    tag = os.path.basename(f).split("_")[1]
-    dst = common.out(cfg, "02_crop_merge", "crop", "linea_%s_aoi.laz" % tag)
+    tag = os.path.splitext(os.path.basename(f))[0]
+    dst = common.out(cfg, "02_crop_merge", "crop", "%s_aoi.laz" % tag)
     reader = {"type": "readers.las", "filename": f}
     if cfg["crop"]["override_srs"]:
         reader["override_srs"] = epsg
@@ -56,6 +56,13 @@ def run(cfg, force=False):
         crops = list(ex.map(_crop_one, [(f, wkt, cfg) for f in files]))
     nin = sum(_count_in(f) for f in files)
     nout = sum(n for _, _, n in crops)
+
+    empty = [t for t, _, n in crops if n == 0]
+    for t in empty:
+        print("[warn] crop sin puntos dentro del AOI, excluido del merge: %s" % t)
+    crops = [c for c in crops if c[2] > 0]
+    if not crops:
+        raise common.QCFailure("ningún crop contiene puntos dentro del AOI")
 
     merged = outs[0]
     epsg = common.epsg_str(cfg)
