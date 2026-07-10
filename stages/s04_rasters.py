@@ -16,7 +16,7 @@ def outputs(cfg):
     return [d("dtm_1m.tif"), d("dsm_1m.tif"), d("density_1m.tif"), d("chm_1m.tif")]
 
 
-def _gdal(cfg, src, dst, r):
+def _writer(cfg, dst, r):
     w = {"type": "writers.gdal", "filename": dst,
          "resolution": cfg["grid"]["resolution"], "bounds": common.bounds_str(cfg),
          "output_type": r["output_type"], "gdaldriver": "GTiff",
@@ -24,10 +24,14 @@ def _gdal(cfg, src, dst, r):
          "radius": r["radius"], "window_size": r["window_size"]}
     if "power" in r:
         w["power"] = r["power"]
+    return w
+
+
+def _gdal(cfg, src, dst, r):
     common.run_pdal([
         {"type": "readers.las", "filename": src},
         {"type": "filters.expression", "expression": r["filter"]},
-        w,
+        _writer(cfg, dst, r),
     ], metadata=False)
 
 
@@ -48,8 +52,17 @@ def run(cfg, force=False):
     rr = cfg["rasters"]
 
     _gdal(cfg, src, dtm_p, rr["dtm"])
-    _gdal(cfg, src, dsm_p, rr["dsm"])
-    _gdal(cfg, src, den_p, rr["density"])
+    if rr["dsm"]["filter"] == rr["density"]["filter"]:
+        # same filter -> one read, two chained writers
+        common.run_pdal([
+            {"type": "readers.las", "filename": src},
+            {"type": "filters.expression", "expression": rr["dsm"]["filter"]},
+            _writer(cfg, dsm_p, rr["dsm"]),
+            _writer(cfg, den_p, rr["density"]),
+        ], metadata=False)
+    else:
+        _gdal(cfg, src, dsm_p, rr["dsm"])
+        _gdal(cfg, src, den_p, rr["density"])
 
     # CHM = DSM - DTM, clamped
     nod = cfg["grid"]["nodata"]
@@ -69,10 +82,13 @@ def run(cfg, force=False):
     # hillshades (QC/visual)
     hs = rr["hillshade"]
     for s, dname in [(dtm_p, "dtm_hillshade.tif"), (dsm_p, "dsm_hillshade.tif")]:
-        subprocess.run(["gdaldem", "hillshade", s, common.out(cfg, "04_rasters", dname),
-                        "-z", str(hs["z_factor"]), "-az", str(hs["azimuth"]),
-                        "-alt", str(hs["altitude"]), "-compute_edges"],
-                       capture_output=True, text=True)
+        r = subprocess.run(["gdaldem", "hillshade", s, common.out(cfg, "04_rasters", dname),
+                            "-z", str(hs["z_factor"]), "-az", str(hs["azimuth"]),
+                            "-alt", str(hs["altitude"]), "-compute_edges"],
+                           capture_output=True, text=True)
+        if r.returncode != 0:
+            raise RuntimeError("gdaldem hillshade failed (%s):\n%s"
+                               % (dname, r.stderr[-1200:]))
 
     # ---- empty-cell QC on the density grid, masked to Predios
     # (density_real now comes from the stage-03 chunked pass)
