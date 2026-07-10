@@ -6,6 +6,7 @@ Kept in one module because all six stages use all of it.
 """
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
 import os
@@ -122,6 +123,7 @@ def bounds_str(cfg):
 
 
 # --------------------------------------------------------------- tool versions
+@functools.lru_cache(maxsize=1)
 def tool_versions():
     def run(cmd):
         try:
