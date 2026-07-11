@@ -37,6 +37,10 @@ ALIASES = {s[0]: i for i, s in enumerate(STAGES)}
 ALIASES.update({s[1]: i for i, s in enumerate(STAGES)})
 
 
+def _now():
+    return time.strftime("%Y-%m-%d %H:%M:%S")
+
+
 def _index(name):
     if name not in ALIASES:
         sys.exit("unknown stage %r; valid: %s" %
@@ -98,13 +102,19 @@ def main():
         ap.error("choose --all, --from STAGE, or --only STAGE")
 
     cfg = common.load_config(args.config)
+    log_path = None
+    if not args.dry_run:
+        log_path = common.start_run_log(cfg)
     try:
         common.validate_config(cfg)
     except common.ConfigError as e:
         print("[CONFIG ERROR] %s" % e)
         sys.exit(3)
     print("config %s  sha256=%s" % (args.config, cfg["_config_sha256"][:12]))
-    print("out_dir %s\n" % cfg["paths"]["_out_dir"])
+    print("out_dir %s" % cfg["paths"]["_out_dir"])
+    if log_path:
+        print("log     %s" % log_path)
+    print()
 
     if not cfg.get("trees", {}).get("enabled", False):
         if any(s[0] == "s07" for s in selected):
@@ -117,16 +127,24 @@ def main():
 
     t0 = time.time()
     for short, name, fn in selected:
-        print("=== %s ===" % name)
+        # banners INICIO/FIN: los parsea la GUI (gui/pipeline_gui.py) — no cambiar formato
+        print("=== INICIO %s %s [%s] ===" % (short, name, _now()))
         st = time.time()
         try:
             fn(cfg, force=args.force)
         except common.QCFailure as e:
             print("\n[QC STOP @ %s] %s" % (name, e))
             sys.exit(2)
-        print("    (%.1fs)\n" % (time.time() - st))
+        except Exception:
+            import traceback
+            traceback.print_exc()
+            print("\n[ERROR @ %s]%s" % (name, " — log: %s" % log_path if log_path else ""))
+            sys.exit(1)
+        print("=== FIN %s %s (%.1fs) ===\n" % (short, name, time.time() - st))
     print("pipeline OK — %d stage(s) in %.1fs" % (len(selected), time.time() - t0))
     print("manifest: %s" % common.out(cfg, "run_manifest.json"))
+    if log_path:
+        print("log: %s" % log_path)
 
 
 if __name__ == "__main__":

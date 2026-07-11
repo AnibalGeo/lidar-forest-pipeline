@@ -122,6 +122,40 @@ def bounds_str(cfg):
     return "([%s, %s], [%s, %s])" % (xmin, xmax, ymin, ymax)
 
 
+# --------------------------------------------------------------- run log
+class _Tee:
+    """Duplica un stream de consola hacia el archivo de log de la corrida."""
+
+    def __init__(self, stream, fh):
+        self._stream = stream
+        self._fh = fh
+
+    def write(self, s):
+        self._stream.write(s)
+        self._fh.write(s)
+        self._fh.flush()  # visible aunque el proceso muera a mitad de etapa
+
+    def flush(self):
+        self._stream.flush()
+        self._fh.flush()
+
+    def __getattr__(self, name):  # encoding, isatty, fileno, ...
+        return getattr(self._stream, name)
+
+
+def start_run_log(cfg):
+    """Espeja stdout+stderr a {out}/logs/run_YYYYMMDD_HHMMSS.log (espejo, no
+    reemplazo: la consola sigue viendo todo). Devuelve la ruta del log, que
+    queda en cfg['_log_path'] para que el manifest la referencie.
+    """
+    path = out(cfg, "logs", "run_%s.log" % datetime.now().strftime("%Y%m%d_%H%M%S"))
+    fh = open(path, "a", encoding="utf-8", errors="replace")
+    sys.stdout = _Tee(sys.stdout, fh)
+    sys.stderr = _Tee(sys.stderr, fh)
+    cfg["_log_path"] = path
+    return path
+
+
 # --------------------------------------------------------------- tool versions
 @functools.lru_cache(maxsize=1)
 def tool_versions():
@@ -227,6 +261,8 @@ def _update_manifest(cfg, stage, seconds, metrics, skipped):
     man["config_path"] = cfg["_config_path"]
     man["config_sha256"] = cfg["_config_sha256"]
     man["versions"] = tool_versions()
+    if cfg.get("_log_path"):
+        man["log_path"] = cfg["_log_path"]
     man["stages"][stage] = {"seconds": round(seconds, 2), "skipped": skipped,
                             "metrics": metrics}
     for k in ("density_real", "ground_pct", "noise_pct"):
@@ -250,6 +286,7 @@ def standalone(run_fn):
     ap.add_argument("--force", action="store_true", help="ignore idempotency, rebuild")
     args = ap.parse_args()
     cfg = load_config(args.config)
+    start_run_log(cfg)
     try:
         validate_config(cfg)
     except ConfigError as e:
@@ -261,4 +298,8 @@ def standalone(run_fn):
     except QCFailure as e:
         print("\n[QC STOP] %s" % e)
         sys.exit(2)
+    except Exception:
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
     print("done in %.1fs" % (time.time() - t0))
