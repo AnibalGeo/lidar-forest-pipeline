@@ -68,9 +68,11 @@ python run_pipeline.py --list-stages                                # list stage
 python stages/s03_classify.py --config configs/myproject.yaml       # any stage standalone
 ```
 
-Outputs always go to **`{project_root}/out/`** (fixed, never next to the code),
-one subfolder per stage, plus `run_manifest.json` and `state/` (idempotency
-markers). **Config validation runs first**: the input LAZ dir, AOI, parcel,
+Outputs go to **`{project_root}/out/`** by default (`paths.output_dir` overrides
+it), one subfolder per stage, plus `run_manifest.json` and `state/` (idempotency
+markers). The first run drops a `.project_id` marker in the output folder; a
+config with another `project.name` pointing at the same folder is rejected
+(exit 3), so two projects can never mix outputs. **Config validation runs first**: the input LAZ dir, AOI, parcel,
 land-use and stockpile layers must exist, `epsg` must be valid, and the AOI bbox
 must intersect the LAZ footprint — otherwise the run stops immediately (exit 3),
 never eight minutes into SMRF.

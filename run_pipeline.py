@@ -125,6 +125,7 @@ def main():
         _dry_run(cfg, selected)
         return
 
+    common.claim_out_dir(cfg)
     t0 = time.time()
     for short, name, fn in selected:
         # banners INICIO/FIN: los parsea la GUI (gui/pipeline_gui.py) — no cambiar formato

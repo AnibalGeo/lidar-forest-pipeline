@@ -74,6 +74,7 @@ class App:
         fm = self.form
         self.v_name = tk.StringVar()
         self.v_root = tk.StringVar()
+        self.v_dest = tk.StringVar()
         self.v_laz = tk.StringVar()
         self.v_aoi = tk.StringVar()
         self.v_predios = tk.StringVar()
@@ -98,30 +99,34 @@ class App:
         fm.columnconfigure(1, weight=1)
         entry_row(0, "Nombre", self.v_name)
         entry_row(1, "project_root", self.v_root, self._browse_root)
+        self.dest_info = ttk.Label(fm, text="(default: project_root/out)",
+                                   foreground="gray")
+        entry_row(2, "Carpeta de destino", self.v_dest, self._browse_dest,
+                  self.dest_info)
         self.laz_info = ttk.Label(fm, text="", foreground="gray")
-        entry_row(2, "Carpeta LAZ", self.v_laz, self._browse_laz, self.laz_info)
-        entry_row(3, "AOI buffer", self.v_aoi, self._browse_aoi)
-        entry_row(4, "Predios", self.v_predios,
+        entry_row(3, "Carpeta LAZ", self.v_laz, self._browse_laz, self.laz_info)
+        entry_row(4, "AOI buffer", self.v_aoi, self._browse_aoi)
+        entry_row(5, "Predios", self.v_predios,
                   lambda: self._browse_vector(self.v_predios))
-        entry_row(5, "Uso (opcional)", self.v_uso,
+        entry_row(6, "Uso (opcional)", self.v_uso,
                   lambda: self._browse_vector(self.v_uso))
-        entry_row(6, "Acopio (opcional)", self.v_acopio,
+        entry_row(7, "Acopio (opcional)", self.v_acopio,
                   lambda: self._browse_vector(self.v_acopio))
-        entry_row(7, "Ortomosaico (opcional)", self.v_ortho, self._browse_ortho)
+        entry_row(8, "Ortomosaico (opcional)", self.v_ortho, self._browse_ortho)
         self.epsg_info = ttk.Label(fm, text="", foreground="gray")
-        entry_row(8, "EPSG", self.v_epsg, extra=self.epsg_info)
+        entry_row(9, "EPSG", self.v_epsg, extra=self.epsg_info)
 
-        ttk.Label(fm, text="Perfil").grid(row=9, column=0, sticky="w")
+        ttk.Label(fm, text="Perfil").grid(row=10, column=0, sticky="w")
         pf = ttk.Frame(fm)
-        pf.grid(row=9, column=1, columnspan=3, sticky="w")
+        pf.grid(row=10, column=1, columnspan=3, sticky="w")
         for p in ("forestal", "agro", "acopios"):
             ttk.Radiobutton(pf, text=p, value=p, variable=self.v_perfil,
                             command=self._on_profile).pack(side="left", padx=4)
         ttk.Label(pf, text="(solo 'forestal' validado)",
                   foreground="gray").pack(side="left", padx=8)
-        entry_row(10, "Resolución (m/píxel)", self.v_res)
+        entry_row(11, "Resolución (m/píxel)", self.v_res)
         ttk.Button(fm, text="Guardar config",
-                   command=self._save_config).grid(row=11, column=1, sticky="w", pady=6)
+                   command=self._save_config).grid(row=12, column=1, sticky="w", pady=6)
 
     def _refresh_configs(self, select=None):
         self.configs = {os.path.basename(p): p for p in ps.list_configs()}
@@ -143,10 +148,18 @@ class App:
         d = filedialog.askdirectory(title="project_root (raíz de datos)")
         if d:
             self.v_root.set(d)
+            if not self.v_dest.get():
+                self.v_dest.set(os.path.join(d, "out"))
             laz = os.path.join(d, "01_Lidar", "IN")
             if os.path.isdir(laz) and not self.v_laz.get():
                 self.v_laz.set(laz)
                 self._update_laz_info()
+
+    def _browse_dest(self):
+        d = filedialog.askdirectory(title="Carpeta de destino (salidas del pipeline)",
+                                    initialdir=self.v_root.get() or None)
+        if d:
+            self.v_dest.set(d)
 
     def _browse_laz(self):
         d = filedialog.askdirectory(title="Carpeta con *.laz",
@@ -221,6 +234,10 @@ class App:
             res = float(self.v_res.get())
             if res <= 0:
                 raise ValueError("resolución debe ser > 0")
+            dest = self.v_dest.get().strip() or None
+            default_dest = os.path.normpath(os.path.join(root, "out"))
+            if dest and os.path.normpath(dest) == default_dest:
+                dest = None  # default del template: {project_root}/out
         except Exception as e:  # noqa: BLE001
             messagebox.showerror("Validación", str(e))
             return
@@ -239,7 +256,8 @@ class App:
                 % (ps.fmt_num(res), ps.format_bounds(bounds))):
             return
         ps.write_config(cfg_path, name, epsg, root, laz_dir, aoi, predios,
-                        uso, acopio, ortho, self.v_perfil.get(), res, bounds)
+                        uso, acopio, ortho, self.v_perfil.get(), res, bounds,
+                        output_dir=dest)
         pend = "" if uso and acopio else \
             "\n\nOJO: hay rutas PENDIENTES (uso/acopio); completar en el YAML antes de correr."
         messagebox.showinfo("Config guardado", "Escrito: %s%s" % (cfg_path, pend))

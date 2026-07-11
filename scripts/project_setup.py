@@ -144,9 +144,10 @@ def format_bounds(bounds):
 
 # --------------------------------------------------------------- escritura
 def write_config(cfg_path, name, epsg, root, laz_dir, aoi, predios,
-                 uso, boundary, ortho, profile, res, bounds):
+                 uso, boundary, ortho, profile, res, bounds, output_dir=None):
     """Escribe el YAML del proyecto desde template.yaml. uso/boundary/ortho
-    pueden ser None (quedan como PENDIENTE / omitidos). Devuelve cfg_path.
+    pueden ser None (quedan como PENDIENTE / omitidos); output_dir None deja
+    el default del template ({project_root}/out). Devuelve cfg_path.
     """
     smrf, qc = PROFILES[profile][1], PROFILES[profile][2]
     with open(TEMPLATE, encoding="utf-8") as fh:
@@ -156,6 +157,9 @@ def write_config(cfg_path, name, epsg, root, laz_dir, aoi, predios,
     set_value(lines, ("project", "name"), name)
     set_value(lines, ("project", "epsg"), epsg)
     set_value(lines, ("paths", "project_root"), yaml_path(root))
+    if output_dir:
+        set_value(lines, ("paths", "output_dir"),
+                  yaml_path(rel_or_abs(output_dir, root)))
     set_value(lines, ("paths", "input_laz_dir"), yaml_path(rel_or_abs(laz_dir, root)))
     set_value(lines, ("paths", "aoi_buffer"), yaml_path(rel_or_abs(aoi, root)))
     set_value(lines, ("paths", "predios"), yaml_path(rel_or_abs(predios, root)))

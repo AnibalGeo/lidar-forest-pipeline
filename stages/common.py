@@ -43,9 +43,10 @@ def load_config(config_path):
     for key in ("input_laz_dir", "aoi_buffer", "predios", "uso",
                 "stockpile_boundary"):
         p["_" + key] = resolve(p[key])
-    # Outputs ALWAYS live under {project_root}/out/ — never next to the code and
-    # never configurable, so a new project cannot accidentally overwrite another.
-    p["_out_dir"] = os.path.join(root, "out")
+    # Outputs default to {project_root}/out/; paths.output_dir (absoluta o
+    # relativa a project_root) lo cambia. Un marcador .project_id evita que dos
+    # proyectos compartan carpeta de salida (ver validate_config / claim_out_dir).
+    p["_out_dir"] = resolve(p.get("output_dir") or "out")
     os.makedirs(p["_out_dir"], exist_ok=True)
     return cfg
 
@@ -101,8 +102,30 @@ def validate_config(cfg):
         except Exception as e:  # noqa: BLE001
             problems.append("could not read AOI %s: %s" % (p["_aoi_buffer"], e))
 
+    # output_dir guard: no escribir en la carpeta de salida de OTRO proyecto
+    marker = os.path.join(p["_out_dir"], ".project_id")
+    name = str(cfg.get("project", {}).get("name", ""))
+    if os.path.exists(marker):
+        with open(marker, encoding="utf-8") as fh:
+            owner = fh.read().strip()
+        if owner != name:
+            problems.append(
+                "output_dir %s ya pertenece al proyecto '%s' (marcador .project_id) "
+                "y este config es '%s' — elige otra carpeta de destino, o borra el "
+                "marcador si el reuso es intencional" % (p["_out_dir"], owner, name))
+
     if problems:
         raise ConfigError("config validation failed:\n  - " + "\n  - ".join(problems))
+
+
+def claim_out_dir(cfg):
+    """Primera corrida real: marca la carpeta de salida con el nombre del
+    proyecto (.project_id). validate_config rechaza configs con otro nombre.
+    """
+    marker = os.path.join(cfg["paths"]["_out_dir"], ".project_id")
+    if not os.path.exists(marker):
+        with open(marker, "w", encoding="utf-8") as fh:
+            fh.write(str(cfg["project"]["name"]) + "\n")
 
 
 def out(cfg, *parts):
@@ -292,6 +315,7 @@ def standalone(run_fn):
     except ConfigError as e:
         print("\n[CONFIG ERROR] %s" % e)
         sys.exit(3)
+    claim_out_dir(cfg)
     t0 = time.time()
     try:
         run_fn(cfg, force=args.force)

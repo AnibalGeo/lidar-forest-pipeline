@@ -14,9 +14,14 @@ project:
 # --- paths -------------------------------------------------------------------
 # Relative paths resolve against project_root. project_root, if relative,
 # resolves against THIS file's directory. Absolute paths are allowed anywhere.
-# Outputs ALWAYS go to {project_root}/out/ (not configurable, never near code).
 paths:
   project_root: ../..              # points at the project data root (holds inputs + out/)
+  output_dir: out                  # output folder: absolute, or relative to project_root
+                                   #   (default "out" -> {project_root}/out). The first run
+                                   #   drops a .project_id marker with project.name there;
+                                   #   a config with ANOTHER name pointing at the same
+                                   #   folder is rejected (exit 3) so two projects can
+                                   #   never mix outputs. Delete the marker to reuse.
   input_laz_dir: 01_Lidar/IN       # folder of raw flight-line *.laz (globbed, sorted)
   aoi_buffer: Vectoriales/aoi.shp  # crop polygon; use AOI + a buffer (e.g. 25 m)
   predios: Vectoriales/predios.shp # boundary for the empty-cell QC mask + real density
