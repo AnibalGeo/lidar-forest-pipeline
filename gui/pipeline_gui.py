@@ -174,6 +174,12 @@ class App:
         ttk.Label(fm, text=label).grid(row=r, column=0, sticky="w", pady=1)
         ttk.Entry(fm, textvariable=var, width=10).grid(row=r, column=1,
                                                        sticky="w", pady=1, padx=4)
+        # descriptor: el comentario de esa clave en template.yaml (única fuente
+        # de verdad — textos pobres se mejoran EN el template, no aquí)
+        doc = self.tpl.get(path, ("", ""))[1]
+        if doc:
+            ttk.Label(fm, text=doc, foreground="gray").grid(
+                row=r, column=2, sticky="w", padx=6)
 
     def _tab_productos(self, fm):
         r = 0

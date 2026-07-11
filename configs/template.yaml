@@ -121,7 +121,7 @@ volumes:
 # treetops (variable-window local maxima) + crowns (watershed) on a detection
 # CHM built at det_res from the classified cloud. Needs scikit-image.
 trees:
-  enabled: false
+  enabled: false                   # true -> s07 runs with --all / --from / --only
   det_res: 0.5                     # detection-CHM resolution (m); finer than the 1 m grid
   det_radius: 0.3536               # writers.gdal radius for the 0.5 m DSM (= res*sqrt(2)/2)
   clamp_min: 0.0                   # negative CHM -> 0
@@ -129,10 +129,10 @@ trees:
   smooth_sigma: 1.0                # gaussian smoothing before peak search
   min_height_m: 2.0                # minimum tree height (drops understory)
   lmf_ws_a: 1.2                    # variable window: ws_m = a + b*h (diameter, m)
-  lmf_ws_b: 0.06
+  lmf_ws_b: 0.06                   # window growth per metre of tree height (b in a + b*h)
   lmf_ws_min: 1.5                  # minimum window (m)
   qc_min_density: 50.0             # plausible trees/ha lower bound (warning only)
-  qc_max_density: 3000.0           # upper bound
+  qc_max_density: 3000.0           # plausible trees/ha upper bound (warning only)
 
 # --- QC gates (breach = stop; thresholds only here) --------------------------
 qc:
