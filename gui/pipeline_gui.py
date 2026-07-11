@@ -415,16 +415,25 @@ class App:
         self.log.delete("1.0", "end")
         self.log.config(state="disabled")
 
+    @staticmethod
+    def _open_path(path):
+        if os.name == "nt":
+            os.startfile(path)
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", path])
+        else:
+            subprocess.Popen(["xdg-open", path])
+
     def _open_outdir(self):
         if self.last_outdir and os.path.isdir(self.last_outdir):
-            os.startfile(self.last_outdir)
+            self._open_path(self.last_outdir)
         else:
             messagebox.showinfo("Salida", "Aún no hay corrida en esta sesión "
                                           "(el out_dir se toma de la salida del proceso).")
 
     def _open_log(self):
         if self.last_log and os.path.exists(self.last_log):
-            os.startfile(self.last_log)
+            self._open_path(self.last_log)
         else:
             messagebox.showinfo("Log", "Aún no hay log de corrida en esta sesión.")
 
