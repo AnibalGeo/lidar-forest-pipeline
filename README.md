@@ -75,6 +75,37 @@ land-use and stockpile layers must exist, `epsg` must be valid, and the AOI bbox
 must intersect the LAZ footprint — otherwise the run stops immediately (exit 3),
 never eight minutes into SMRF.
 
+## GUI
+
+Interfaz de escritorio (tkinter, sin dependencias nuevas) para crear configs y
+lanzar corridas sin terminal. En Windows, doble clic en **`lanzar_pipeline.bat`**
+(raíz del repo): activa el env conda declarado en `environment.yml` (si no
+existe intenta `base`) y abre la GUI. Si algo falla, la ventana queda pausada
+para leer el error. Arranque manual: `python gui/pipeline_gui.py`.
+
+- **A) Proyecto** — elegir un config existente (`configs/*.yaml`, sin el
+  template) o "Nuevo proyecto": el formulario valida rutas, cuenta los LAZ,
+  autodetecta el EPSG del AOI, calcula `grid.bounds` (se muestran para
+  confirmar) y escribe el YAML vía `scripts/project_setup.py` — la misma
+  lógica que el wizard de consola `scripts/new_project.py`.
+- **B) Ejecución** — `Dry-run` / `EJECUTAR` / `Cancelar`. Corre
+  `run_pipeline.py` como subproceso con salida en vivo, barra de progreso por
+  etapa y estado final: verde = OK, ámbar = QC stop (exit 2), rojo = error.
+  Cancelar termina el proceso y sus hijos (pdal) previa confirmación.
+- **C) Log** — salida en vivo + botones "Abrir carpeta de salida" y "Abrir
+  log". Cada corrida real queda espejada en
+  `{project_root}/out/logs/run_YYYYMMDD_HHMMSS.log` (referenciado en
+  `run_manifest.json → log_path`).
+
+La GUI no contiene lógica de pipeline ni parámetros: solo escribe/selecciona
+configs y lanza el proceso.
+
+**Acceso directo con ícono:** clic derecho en `lanzar_pipeline.bat` → *Enviar
+a → Escritorio (crear acceso directo)*. Luego, clic derecho en el acceso
+directo → *Propiedades → Cambiar icono...* y elegir un `.ico` (o uno de
+`C:\Windows\System32\shell32.dll`). En *Ejecutar:* puede elegirse "Minimizada"
+para ocultar la consola del lanzador.
+
 ## Benchmarks
 
 Clean `--all` run from the raw LAZ, reference dataset, single workstation
