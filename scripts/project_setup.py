@@ -101,6 +101,32 @@ def compute_bounds(aoi_path, epsg, res):
 
 
 # ------------------------------------------------------- edición del template
+def parse_template():
+    """{ruta tupla: (valor crudo str, comentario de la línea)} de template.yaml.
+
+    Misma lógica de jerarquía por indentación que set_value. El comentario es
+    la primera línea (el texto tras '#' en la línea de la clave) — única fuente
+    de verdad de los descriptores de la GUI: mejorar textos EN el template.
+    """
+    with open(TEMPLATE, encoding="utf-8") as fh:
+        lines = fh.read().splitlines()
+    stack, out = [], {}
+    for line in lines:
+        m = re.match(r"^(\s*)([A-Za-z_][A-Za-z0-9_]*):(.*)$", line)
+        if not m or line.lstrip().startswith("#"):
+            continue
+        indent = len(m.group(1))
+        while stack and stack[-1][0] >= indent:
+            stack.pop()
+        stack.append((indent, m.group(2)))
+        rest = m.group(3)
+        cm = rest.find("#")
+        val = (rest[:cm] if cm >= 0 else rest).strip()
+        doc = rest[cm + 1:].strip() if cm >= 0 else ""
+        out[tuple(k for _, k in stack)] = (val, doc)
+    return out
+
+
 def set_value(lines, path, value):
     """Reemplaza el valor de una clave YAML (ruta tipo ('rasters','dtm','radius'))
     en las líneas del template, conservando el comentario de la línea.
@@ -119,13 +145,15 @@ def set_value(lines, path, value):
             rest = m.group(3)
             cm = rest.find("#")
             comment = rest[cm:] if cm >= 0 else ""
-            pad = " "
+            pad = ""
             if comment:
+                # '#' mantiene su columna original (idempotente: re-aplicar el
+                # mismo valor no desplaza el comentario)
                 col = len(m.group(1)) + len(m.group(2)) + 1 + cm
-                pad = " " + " " * max(0, col - len(m.group(1)) - len(m.group(2)) - 2
-                                      - len(str(value)))
+                pad = " " * max(1, col - len(m.group(1)) - len(m.group(2)) - 2
+                                - len(str(value)))
             lines[i] = "%s%s: %s%s%s" % (m.group(1), m.group(2), value,
-                                         pad if comment else "", comment)
+                                         pad, comment)
             return True
     raise KeyError("clave no encontrada en template: %s" % ".".join(path))
 
@@ -157,10 +185,13 @@ def format_bounds(bounds):
 
 # --------------------------------------------------------------- escritura
 def write_config(cfg_path, name, epsg, root, laz_dir, aoi, predios,
-                 uso, boundary, ortho, profile, res, bounds, output_dir=None):
+                 uso, boundary, ortho, profile, res, bounds, output_dir=None,
+                 params=None):
     """Escribe el YAML del proyecto desde template.yaml. uso/boundary/ortho
     pueden ser None (quedan como PENDIENTE / omitidos); output_dir None deja
-    el default del template ({project_root}/out). Devuelve cfg_path.
+    el default del template ({project_root}/out). params: dict opcional
+    {ruta tupla: valor str} aplicado AL FINAL (gana sobre perfil/derivados) —
+    lo usa el editor de parámetros de la GUI. Devuelve cfg_path.
     """
     smrf, qc = PROFILES[profile][1], PROFILES[profile][2]
     with open(TEMPLATE, encoding="utf-8") as fh:
@@ -193,6 +224,9 @@ def write_config(cfg_path, name, epsg, root, laz_dir, aoi, predios,
     for k, v in qc.items():
         set_value(lines, ("qc", k), v)
     set_value(lines, ("volumes", "resolution"), fmt_num(res))
+    if params:
+        for path, value in params.items():
+            set_value(lines, path, value)
 
     header = ["# Config generado por scripts/new_project.py — perfil: %s%s" %
               (profile, "" if profile == "forestal"

@@ -9,6 +9,7 @@ salida en vivo vía hilo+queue, progreso por banners de etapa), C) log.
 REGLA: la GUI no contiene lógica de pipeline ni parámetros — solo escribe/
 selecciona configs y lanza el proceso. Los valores viven en el YAML.
 """
+import math
 import os
 import queue
 import re
@@ -71,20 +72,63 @@ class App:
         # ---- formulario de proyecto nuevo (oculto hasta pulsar el botón)
         self.form = ttk.Frame(f, padding=(4, 8, 4, 2))
         self.form_visible = False
-        fm = self.form
-        self.v_name = tk.StringVar()
-        self.v_root = tk.StringVar()
-        self.v_dest = tk.StringVar()
-        self.v_laz = tk.StringVar()
-        self.v_aoi = tk.StringVar()
-        self.v_predios = tk.StringVar()
-        self.v_uso = tk.StringVar()
-        self.v_acopio = tk.StringVar()
-        self.v_ortho = tk.StringVar()
-        self.v_epsg = tk.StringVar()
-        self.v_perfil = tk.StringVar(value="forestal")
-        self.v_res = tk.StringVar(value=ps.fmt_num(ps.PROFILES["forestal"][0]))
+        self._build_form(self.form)
 
+    # ---- formulario: pestañas por nivel de parámetros -----------------------
+    def _build_form(self, fm):
+        self.tpl = ps.parse_template()  # {ruta: (valor, comentario)} — defaults
+        for attr in ("v_name", "v_root", "v_dest", "v_laz", "v_aoi", "v_predios",
+                     "v_uso", "v_acopio", "v_ortho", "v_epsg"):
+            setattr(self, attr, tk.StringVar())
+        self.v_perfil = tk.StringVar(value="forestal")
+        self.v_trees = tk.BooleanVar(value=False)
+        # (atributo, etiqueta, ruta en template.yaml) por pestaña
+        self.prod_fields = [
+            ("v_res", "Resolución DTM/DSM/CHM (m)", ("grid", "resolution")),
+            ("v_clamp", "Clamp CHM (m)", ("rasters", "chm", "clamp_max")),
+            ("v_cover", "Umbral cobertura (m)", ("zone_stats", "cover_threshold_m")),
+            ("v_pctl", "Percentil", ("zone_stats", "percentile")),
+            ("v_vol_res", "Resolución cubicación (m)", ("volumes", "resolution")),
+        ]
+        self.tree_fields = [
+            ("v_t_det_res", "det_res (m)", ("trees", "det_res")),
+            ("v_t_min_height", "min_height (m)", ("trees", "min_height_m")),
+            ("v_t_ws_a", "lmf_ws_a", ("trees", "lmf_ws_a")),
+            ("v_t_ws_b", "lmf_ws_b", ("trees", "lmf_ws_b")),
+            ("v_t_ws_min", "lmf_ws_min (m)", ("trees", "lmf_ws_min")),
+            ("v_t_sigma", "smooth_sigma", ("trees", "smooth_sigma")),
+            ("v_t_qmin", "qc densidad min (árb/ha)", ("trees", "qc_min_density")),
+            ("v_t_qmax", "qc densidad max (árb/ha)", ("trees", "qc_max_density")),
+        ]
+        self.adv_fields = [
+            ("v_s_slope", "SMRF slope", ("classify", "smrf", "slope")),
+            ("v_s_window", "SMRF window (celdas)", ("classify", "smrf", "window")),
+            ("v_s_thr", "SMRF threshold (m)", ("classify", "smrf", "threshold")),
+            ("v_s_scalar", "SMRF scalar", ("classify", "smrf", "scalar")),
+            ("v_s_cell", "SMRF cell (m)", ("classify", "smrf", "cell")),
+            ("v_o_meank", "outlier mean_k", ("classify", "outlier", "mean_k")),
+            ("v_o_mult", "outlier multiplier", ("classify", "outlier", "multiplier")),
+        ]
+        self.param_fields = self.prod_fields + self.tree_fields + self.adv_fields
+        for attr, _label, _path in self.param_fields:
+            setattr(self, attr, tk.StringVar())
+
+        nb = ttk.Notebook(fm)
+        nb.pack(fill="both", expand=True)
+        tabs = {}
+        for key, title in (("proyecto", "Proyecto"), ("productos", "Productos"),
+                           ("arboles", "Árboles s07"), ("avanzado", "Avanzado")):
+            tabs[key] = ttk.Frame(nb, padding=6)
+            nb.add(tabs[key], text=title)
+        self._tab_proyecto(tabs["proyecto"])
+        self._tab_productos(tabs["productos"])
+        self._tab_arboles(tabs["arboles"])
+        self._tab_avanzado(tabs["avanzado"])
+        ttk.Button(fm, text="Guardar config",
+                   command=self._save_config).pack(anchor="w", pady=6)
+        self._load_profile_defaults("forestal")
+
+    def _tab_proyecto(self, fm):
         def entry_row(r, label, var, browse=None, extra=None):
             ttk.Label(fm, text=label).grid(row=r, column=0, sticky="w", pady=1)
             e = ttk.Entry(fm, textvariable=var, width=52)
@@ -122,11 +166,78 @@ class App:
         for p in ("forestal", "agro", "acopios"):
             ttk.Radiobutton(pf, text=p, value=p, variable=self.v_perfil,
                             command=self._on_profile).pack(side="left", padx=4)
-        ttk.Label(pf, text="(solo 'forestal' validado)",
+        ttk.Label(pf, text="(solo 'forestal' validado; cambiar perfil resetea las"
+                           " otras pestañas a sus defaults)",
                   foreground="gray").pack(side="left", padx=8)
-        entry_row(11, "Resolución (m/píxel)", self.v_res)
-        ttk.Button(fm, text="Guardar config",
-                   command=self._save_config).grid(row=12, column=1, sticky="w", pady=6)
+
+    def _param_row(self, fm, r, label, var, path):
+        ttk.Label(fm, text=label).grid(row=r, column=0, sticky="w", pady=1)
+        ttk.Entry(fm, textvariable=var, width=10).grid(row=r, column=1,
+                                                       sticky="w", pady=1, padx=4)
+
+    def _tab_productos(self, fm):
+        r = 0
+        for attr, label, path in self.prod_fields:
+            self._param_row(fm, r, label, getattr(self, attr), path)
+            r += 1
+        self.radius_lbl = ttk.Label(fm, foreground="gray")
+        self.radius_lbl.grid(row=r, column=0, columnspan=3, sticky="w", pady=(4, 0))
+        self.v_res.trace_add("write", lambda *a: self._update_radius_lbl())
+        self._update_radius_lbl()
+
+    def _update_radius_lbl(self):
+        # los radios de writers.gdal NO son campos: derivan de la resolución
+        try:
+            res = float(self.v_res.get())
+            self.radius_lbl.config(text=(
+                "radios writers.gdal calculados (no editables): DTM %s (res·√2, "
+                "window_size 3) · DSM/density %s (res·√2/2, window_size 0)"
+                % (round(res * math.sqrt(2), 4), round(res * math.sqrt(2) / 2, 4))))
+        except ValueError:
+            self.radius_lbl.config(text="radios calculados: — (resolución inválida)")
+
+    def _tab_arboles(self, fm):
+        ttk.Checkbutton(fm, text="habilitar detección de árboles (s07)",
+                        variable=self.v_trees).grid(row=0, column=0, columnspan=3,
+                                                    sticky="w", pady=(0, 4))
+        r = 1
+        for attr, label, path in self.tree_fields:
+            self._param_row(fm, r, label, getattr(self, attr), path)
+            r += 1
+        self.det_radius_lbl = ttk.Label(fm, foreground="gray")
+        self.det_radius_lbl.grid(row=r, column=0, columnspan=3, sticky="w", pady=(4, 0))
+        self.v_t_det_res.trace_add("write", lambda *a: self._update_det_radius_lbl())
+        self._update_det_radius_lbl()
+
+    def _update_det_radius_lbl(self):
+        try:
+            d = float(self.v_t_det_res.get())
+            self.det_radius_lbl.config(text="radio calculado (det_res·√2/2): %s"
+                                            % round(d * math.sqrt(2) / 2, 4))
+        except ValueError:
+            self.det_radius_lbl.config(text="radio calculado: —")
+
+    def _tab_avanzado(self, fm):
+        tk.Label(fm, fg="white", bg="#a02020", justify="left", anchor="w", padx=6,
+                 pady=4, text="Validados para bosque adulto denso. Cambiar altera la "
+                              "clasificación de suelo: revisar hillshade del DTM antes "
+                              "de aceptar resultados.").grid(
+            row=0, column=0, columnspan=3, sticky="we", pady=(0, 6))
+        r = 1
+        for attr, label, path in self.adv_fields:
+            self._param_row(fm, r, label, getattr(self, attr), path)
+            r += 1
+
+    def _load_profile_defaults(self, profile):
+        """Defaults de todas las pestañas: template.yaml + overrides del perfil."""
+        prof_res, smrf, _qc = ps.PROFILES[profile]
+        for attr, _label, path in self.param_fields:
+            getattr(self, attr).set(self.tpl.get(path, ("", ""))[0])
+        self.v_res.set(ps.fmt_num(prof_res))
+        self.v_vol_res.set(ps.fmt_num(prof_res))
+        self.v_s_slope.set(str(smrf["slope"]))
+        self.v_s_thr.set(str(smrf["threshold"]))
+        self.v_trees.set(self.tpl.get(("trees", "enabled"), ("false", ""))[0] == "true")
 
     def _refresh_configs(self, select=None):
         self.configs = {os.path.basename(p): p for p in ps.list_configs()}
@@ -208,7 +319,7 @@ class App:
             self.v_ortho.set(p)
 
     def _on_profile(self):
-        self.v_res.set(ps.fmt_num(ps.PROFILES[self.v_perfil.get()][0]))
+        self._load_profile_defaults(self.v_perfil.get())
 
     # ---- guardar: validar + bounds + escribir YAML (todo vía project_setup)
     def _save_config(self):
@@ -231,7 +342,14 @@ class App:
                       if self.v_acopio.get().strip() else None)
             ortho = self.v_ortho.get().strip() or None
             epsg = ps.validate_epsg(self.v_epsg.get().strip())
-            res = float(self.v_res.get())
+            nums = {}
+            for attr, label, path in self.param_fields:
+                raw = getattr(self, attr).get().strip()
+                try:
+                    nums[path] = float(raw)
+                except ValueError:
+                    raise ValueError("%s: número inválido (%r)" % (label, raw))
+            res = nums[("grid", "resolution")]
             if res <= 0:
                 raise ValueError("resolución debe ser > 0")
             dest = self.v_dest.get().strip() or None
@@ -255,9 +373,15 @@ class App:
                 "(editables a mano después en el YAML)"
                 % (ps.fmt_num(res), ps.format_bounds(bounds))):
             return
+        # pestañas -> params del YAML (strings tal cual; radios derivados aquí)
+        params = {path: getattr(self, attr).get().strip()
+                  for attr, _label, path in self.param_fields}
+        params[("trees", "enabled")] = "true" if self.v_trees.get() else "false"
+        params[("trees", "det_radius")] = str(round(
+            nums[("trees", "det_res")] * math.sqrt(2) / 2, 4))
         ps.write_config(cfg_path, name, epsg, root, laz_dir, aoi, predios,
                         uso, acopio, ortho, self.v_perfil.get(), res, bounds,
-                        output_dir=dest)
+                        output_dir=dest, params=params)
         pend = "" if uso and acopio else \
             "\n\nOJO: hay rutas PENDIENTES (uso/acopio); completar en el YAML antes de correr."
         messagebox.showinfo("Config guardado", "Escrito: %s%s" % (cfg_path, pend))
