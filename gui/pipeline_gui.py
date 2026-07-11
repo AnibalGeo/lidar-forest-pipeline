@@ -67,6 +67,7 @@ class App:
         self.cfg_combo.pack(side="left", padx=6)
         ttk.Button(row, text="Nuevo proyecto",
                    command=self._toggle_form).pack(side="left", padx=6)
+        self.cfg_combo.bind("<<ComboboxSelected>>", self._load_config_into_form)
         self._refresh_configs()
 
         # ---- formulario de proyecto nuevo (oculto hasta pulsar el botón)
@@ -326,6 +327,68 @@ class App:
 
     def _on_profile(self):
         self._load_profile_defaults(self.v_perfil.get())
+
+    def _load_config_into_form(self, event=None):
+        """Modo edición: puebla las pestañas con los valores del config elegido
+        (no con defaults). Guardar con el mismo nombre lo sobrescribe.
+        """
+        name = self.cfg_var.get()
+        if not name:
+            return
+        cfg_path = self.configs[name]
+        try:
+            sys.path.insert(0, os.path.join(PIPE_DIR, "stages"))
+            import common
+            cfg = common.load_config(cfg_path)
+        except Exception as e:  # noqa: BLE001
+            messagebox.showerror("Config", "No se pudo leer %s: %s" % (name, e))
+            return
+
+        def opt(path):  # rutas opcionales: PENDIENTE del wizard -> campo vacío
+            return "" if os.path.basename(path).startswith("PENDIENTE") else path
+
+        p = cfg["paths"]
+        self.v_name.set(str(cfg["project"]["name"]))
+        self.v_root.set(cfg["_project_root"])
+        self.v_dest.set(p["_out_dir"])
+        self.v_laz.set(p["_input_laz_dir"])
+        self._update_laz_info()
+        self.v_aoi.set(p["_aoi_buffer"])
+        self.v_predios.set(p["_predios"])
+        self.v_uso.set(opt(p["_uso"]))
+        self.v_acopio.set(opt(p["_stockpile_boundary"]))
+        self.v_epsg.set(str(cfg["project"]["epsg"]))
+        self.epsg_info.config(text="del config %s" % name)
+
+        # perfil y ortho viven solo en los comentarios de cabecera del YAML
+        self.v_ortho.set("")
+        with open(cfg_path, encoding="utf-8") as fh:
+            for line in fh:
+                if not line.startswith("#"):
+                    break
+                m = re.search(r"perfil: (\w+)", line)
+                if m and m.group(1) in ps.PROFILES:
+                    self.v_perfil.set(m.group(1))
+                m = re.match(r"^# ortho: (\S+)", line)
+                if m:
+                    self.v_ortho.set(m.group(1).strip('"'))
+
+        def dig(d, path):
+            for k in path:
+                d = d[k]
+            return d
+
+        for attr, _label, path in self.param_fields:
+            try:
+                getattr(self, attr).set(str(dig(cfg, path)))
+            except (KeyError, TypeError):
+                pass  # clave ausente en configs viejos: queda el valor actual
+        try:
+            self.v_trees.set(bool(dig(cfg, ("trees", "enabled"))))
+        except (KeyError, TypeError):
+            pass
+        if not self.form_visible:
+            self._toggle_form()
 
     # ---- guardar: validar + bounds + escribir YAML (todo vía project_setup)
     def _save_config(self):
