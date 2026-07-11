@@ -77,8 +77,7 @@ def main():
 
     # 3. carpeta LAZ
     while True:
-        laz_dir = ask_dir("Carpeta LAZ", os.path.join(root, "01_Lidar", "IN")
-                          if os.path.isdir(os.path.join(root, "01_Lidar", "IN")) else None)
+        laz_dir = ask_dir("Carpeta LAZ", ps.find_laz_dir(root))
         laz, gb = ps.scan_laz(laz_dir)
         if laz:
             print("  -> %d archivos, %.2f GB" % (len(laz), gb))

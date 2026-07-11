@@ -14,6 +14,9 @@ PIPE_DIR = os.path.dirname(HERE)
 CONFIGS_DIR = os.path.join(PIPE_DIR, "configs")
 TEMPLATE = os.path.join(CONFIGS_DIR, "template.yaml")
 
+# subcarpetas típicas de LAZ bajo project_root, en orden de preferencia
+LAZ_DIR_CANDIDATES = ["01_Lidar/IN", "laz", "LAZ", "01_Lidar", "IN"]
+
 # perfil -> (resolución default, smrf overrides, qc overrides)
 PROFILES = {
     "forestal": (1.0,
@@ -43,6 +46,16 @@ def scan_laz(laz_dir):
     files = glob.glob(os.path.join(laz_dir, "*.laz"))
     gb = sum(os.path.getsize(f) for f in files) / 1024**3
     return files, gb
+
+
+def find_laz_dir(root):
+    """Primer candidato de LAZ_DIR_CANDIDATES bajo root que exista y contenga
+    *.laz, o None."""
+    for cand in LAZ_DIR_CANDIDATES:
+        d = os.path.join(root, *cand.split("/"))
+        if os.path.isdir(d) and scan_laz(d)[0]:
+            return d
+    return None
 
 
 def validate_vector(path):

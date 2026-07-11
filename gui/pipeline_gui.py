@@ -150,8 +150,8 @@ class App:
             self.v_root.set(d)
             if not self.v_dest.get():
                 self.v_dest.set(os.path.join(d, "out"))
-            laz = os.path.join(d, "01_Lidar", "IN")
-            if os.path.isdir(laz) and not self.v_laz.get():
+            laz = ps.find_laz_dir(d)
+            if laz and not self.v_laz.get():
                 self.v_laz.set(laz)
                 self._update_laz_info()
 
