@@ -12,8 +12,10 @@ import common  # noqa: E402
 
 
 def outputs(cfg):
+    sfx = common.res_suffix(cfg)
     d = lambda n: common.out(cfg, "04_rasters", n)  # noqa: E731
-    return [d("dtm_1m.tif"), d("dsm_1m.tif"), d("density_1m.tif"), d("chm_1m.tif")]
+    return [d("dtm_%s.tif" % sfx), d("dsm_%s.tif" % sfx),
+            d("density_%s.tif" % sfx), d("chm_%s.tif" % sfx)]
 
 
 def _writer(cfg, dst, r):
@@ -81,7 +83,9 @@ def run(cfg, force=False):
 
     # hillshades (QC/visual)
     hs = rr["hillshade"]
-    for s, dname in [(dtm_p, "dtm_hillshade.tif"), (dsm_p, "dsm_hillshade.tif")]:
+    sfx = common.res_suffix(cfg)
+    for s, dname in [(dtm_p, "dtm_hillshade_%s.tif" % sfx),
+                     (dsm_p, "dsm_hillshade_%s.tif" % sfx)]:
         r = subprocess.run(["gdaldem", "hillshade", s, common.out(cfg, "04_rasters", dname),
                             "-z", str(hs["z_factor"]), "-az", str(hs["azimuth"]),
                             "-alt", str(hs["altitude"]), "-compute_edges"],

@@ -139,6 +139,15 @@ def epsg_str(cfg):
     return "EPSG:%d" % cfg["project"]["epsg"]
 
 
+def res_suffix(cfg):
+    """Sufijo de resolución para nombres de raster: 1.0 -> '1m', 0.25 -> '0p25m'.
+    Lo usan s04 (escritura) y s05/s06/s07 (lectura) — nunca strings propios.
+    """
+    r = float(cfg["grid"]["resolution"])
+    s = str(int(r)) if r == int(r) else str(r).replace(".", "p")
+    return s + "m"
+
+
 def bounds_str(cfg):
     """PDAL writers.gdal bounds string: ([xmin, xmax], [ymin, ymax])."""
     xmin, xmax, ymin, ymax = cfg["grid"]["bounds"]

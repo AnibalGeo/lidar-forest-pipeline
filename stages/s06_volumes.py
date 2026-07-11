@@ -22,7 +22,7 @@ def outputs(cfg):
 def _run_variant(cfg, surface, out_sub, extra_args):
     out_dir = common.out(cfg, "06_volumes", out_sub, ".keep")
     out_dir = os.path.dirname(out_dir)
-    dtm = common.out(cfg, "04_rasters", "dtm_1m.tif")
+    dtm = common.out(cfg, "04_rasters", "dtm_%s.tif" % common.res_suffix(cfg))
     cmd = [sys.executable, TOOL, surface, cfg["paths"]["_stockpile_boundary"],
            "--base-dtm", dtm, "--name-field", cfg["paths"]["stockpile_name_field"],
            "--out-dir", out_dir] + extra_args
@@ -43,7 +43,7 @@ def run(cfg, force=False):
         return
     t0 = time.time()
     cloud = common.out(cfg, "03_classify", "merged_class.laz")
-    dsm = common.out(cfg, "04_rasters", "dsm_1m.tif")
+    dsm = common.out(cfg, "04_rasters", "dsm_%s.tif" % common.res_suffix(cfg))
 
     # pre-crop the cloud to the stockpile bbox (+10 m) so the volume tool
     # grids a few hundred metres instead of the whole AOI

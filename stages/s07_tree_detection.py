@@ -350,7 +350,8 @@ def run(cfg, force=False):
     metrics = run_detection(
         chm_path=None,
         merged_class=Path(common.out(cfg, "03_classify", "merged_class.laz")),
-        dtm_path=Path(common.out(cfg, "04_rasters", "dtm_1m.tif")),
+        dtm_path=Path(common.out(cfg, "04_rasters",
+                                 "dtm_%s.tif" % common.res_suffix(cfg))),
         out_dir=Path(os.path.dirname(outs[0])),
         params=params)
     common.record_stage(cfg, "s07_tree_detection", time.time() - t0,

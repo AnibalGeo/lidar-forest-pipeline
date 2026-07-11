@@ -26,7 +26,7 @@ def run(cfg, force=False):
     import geopandas as gpd
     from rasterio.mask import mask as rmask
 
-    chm = common.out(cfg, "04_rasters", "chm_1m.tif")
+    chm = common.out(cfg, "04_rasters", "chm_%s.tif" % common.res_suffix(cfg))
     thr = cfg["zone_stats"]["cover_threshold_m"]
     pct = cfg["zone_stats"]["percentile"]
     passthrough = cfg["zone_stats"]["passthrough_fields"]
