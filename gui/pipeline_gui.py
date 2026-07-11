@@ -328,6 +328,26 @@ class App:
     def _on_profile(self):
         self._load_profile_defaults(self.v_perfil.get())
 
+    @staticmethod
+    def _density_warning(out_dir, res):
+        """Texto de aviso si, con la densidad de ground de un inventario previo
+        (run_manifest.json en la carpeta de destino), la resolución puede dejar
+        celdas de DTM vacías (~<4 pts de ground por celda). None si no aplica.
+        """
+        import json
+        mpath = os.path.join(out_dir, "run_manifest.json")
+        try:
+            with open(mpath, encoding="utf-8") as fh:
+                km = json.load(fh)["key_metrics"]
+            ground = km["density_real"] * km["ground_pct"] / 100.0
+        except Exception:  # noqa: BLE001 — sin inventario previo: sin warning
+            return None
+        if ground <= 0 or res * res * ground >= 4:
+            return None
+        return ("a %.1f pts/m2 de ground (inventario previo en %s), resolución "
+                "< %.2f m puede dejar celdas vacías en el DTM"
+                % (ground, mpath, math.sqrt(4 / ground)))
+
     def _load_config_into_form(self, event=None):
         """Modo edición: puebla las pestañas con los valores del config elegido
         (no con defaults). Guardar con el mismo nombre lo sobrescribe.
@@ -421,12 +441,31 @@ class App:
             res = nums[("grid", "resolution")]
             if res <= 0:
                 raise ValueError("resolución debe ser > 0")
+            # ---- validaciones cruzadas (bloqueantes)
+            if self.v_trees.get() and nums[("trees", "det_res")] > res:
+                raise ValueError(
+                    "det_res (%s) debe ser <= resolución del CHM (%s): el CHM de "
+                    "detección es más fino que la grilla, no más grueso"
+                    % (nums[("trees", "det_res")], ps.fmt_num(res)))
+            if nums[("rasters", "chm", "clamp_max")] <= nums[("zone_stats", "cover_threshold_m")]:
+                raise ValueError(
+                    "clamp CHM (%s m) debe ser > umbral de cobertura (%s m): con el "
+                    "clamp por debajo del umbral la métrica de cobertura queda vacía"
+                    % (nums[("rasters", "chm", "clamp_max")],
+                       nums[("zone_stats", "cover_threshold_m")]))
             dest = self.v_dest.get().strip() or None
             default_dest = os.path.normpath(os.path.join(root, "out"))
             if dest and os.path.normpath(dest) == default_dest:
                 dest = None  # default del template: {project_root}/out
         except Exception as e:  # noqa: BLE001
             messagebox.showerror("Validación", str(e))
+            return
+
+        # warning NO bloqueante: resolución vs densidad de ground del inventario
+        # previo (manifest de la carpeta de destino), si existe
+        warn = self._density_warning(dest or os.path.join(root, "out"), res)
+        if warn and not messagebox.askyesno("Resolución vs densidad",
+                                            warn + "\n\n¿Continuar igual?"):
             return
 
         cfg_path = ps.config_path(name)
