@@ -79,6 +79,8 @@ never eight minutes into SMRF.
 
 ## GUI
 
+![GUI del pipeline con un config cargado](docs/figures/gui_pipeline.png)
+
 Interfaz de escritorio (tkinter, sin dependencias nuevas) para crear configs y
 lanzar corridas sin terminal. En Windows, doble clic en **`lanzar_pipeline.bat`**
 (raíz del repo): activa el env conda declarado en `environment.yml` (si no
